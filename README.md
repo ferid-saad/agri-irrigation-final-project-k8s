@@ -4,7 +4,7 @@
 ![Docker](https://img.shields.io/badge/Docker-ready-blue?logo=docker)
 ![Kubernetes](https://img.shields.io/badge/K3S-orchestrated-brightgreen?logo=kubernetes)
 ![Node.js](https://img.shields.io/badge/Node.js-20-green?logo=node.js)
-![License](https://img.shields.io/badge/License-MIT-yellow)
+
 
 ---
 
@@ -109,8 +109,8 @@ Avant de commencer, assurez-vous d'avoir installé :
 ### 1. Cloner le dépôt
 
 ```bash
-git clone https://github.com/ferid-saad/agri-irrigation.git
-cd agri-irrigation
+git clone https://github.com/ferid-saad/agri-irrigation-final-project-k8s.git
+cd agri-irrigation-final-project-k8s
 ```
 
 ### 2. Lancer tous les services
