@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: agri-irrigation
+data:
+  init-db.sql: |
+    CREATE DATABASE auth_db;
+    CREATE DATABASE irrigation_db;

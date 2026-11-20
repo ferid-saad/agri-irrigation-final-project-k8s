@@ -1,0 +1,6 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agri-irrigation
+  labels:
+    app.kubernetes.io/name: agri-irrigation

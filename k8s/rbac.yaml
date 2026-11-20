@@ -1,0 +1,292 @@
+# =============================================================================
+# RBAC — Agri Irrigation
+# ServiceAccounts + Roles + RoleBindings pour chaque microservice
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# ServiceAccounts
+# -----------------------------------------------------------------------------
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: auth-service-sa
+  namespace: agri-irrigation
+  labels:
+    app: auth-service
+    app.kubernetes.io/part-of: agri-irrigation
+automountServiceAccountToken: false
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: irrigation-service-sa
+  namespace: agri-irrigation
+  labels:
+    app: irrigation-service
+    app.kubernetes.io/part-of: agri-irrigation
+automountServiceAccountToken: false
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: notification-service-sa
+  namespace: agri-irrigation
+  labels:
+    app: notification-service
+    app.kubernetes.io/part-of: agri-irrigation
+automountServiceAccountToken: false
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: frontend-sa
+  namespace: agri-irrigation
+  labels:
+    app: frontend
+    app.kubernetes.io/part-of: agri-irrigation
+automountServiceAccountToken: false
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: postgres-sa
+  namespace: agri-irrigation
+  labels:
+    app: postgres
+    app.kubernetes.io/part-of: agri-irrigation
+automountServiceAccountToken: false
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mongodb-sa
+  namespace: agri-irrigation
+  labels:
+    app: mongodb
+    app.kubernetes.io/part-of: agri-irrigation
+automountServiceAccountToken: false
+
+# -----------------------------------------------------------------------------
+# Roles
+# -----------------------------------------------------------------------------
+
+# auth-service : lecture des Secrets et ConfigMaps qui lui sont propres
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: auth-service-role
+  namespace: agri-irrigation
+  labels:
+    app: auth-service
+    app.kubernetes.io/part-of: agri-irrigation
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["agri-config"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["agri-secrets"]
+    verbs: ["get"]
+
+# irrigation-service : lecture des Secrets et ConfigMaps qui lui sont propres
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: irrigation-service-role
+  namespace: agri-irrigation
+  labels:
+    app: irrigation-service
+    app.kubernetes.io/part-of: agri-irrigation
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["agri-config"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["agri-secrets"]
+    verbs: ["get"]
+
+# notification-service : lecture des Secrets et ConfigMaps qui lui sont propres
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: notification-service-role
+  namespace: agri-irrigation
+  labels:
+    app: notification-service
+    app.kubernetes.io/part-of: agri-irrigation
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["agri-config"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["agri-secrets"]
+    verbs: ["get"]
+
+# frontend : aucun accès à l'API K8s (rôle vide — principe du moindre privilège)
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: frontend-role
+  namespace: agri-irrigation
+  labels:
+    app: frontend
+    app.kubernetes.io/part-of: agri-irrigation
+rules: []
+
+# postgres : lecture de son propre Secret (credentials)
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: postgres-role
+  namespace: agri-irrigation
+  labels:
+    app: postgres
+    app.kubernetes.io/part-of: agri-irrigation
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["agri-secrets"]
+    verbs: ["get"]
+
+# mongodb : lecture de son propre Secret (credentials)
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mongodb-role
+  namespace: agri-irrigation
+  labels:
+    app: mongodb
+    app.kubernetes.io/part-of: agri-irrigation
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["agri-secrets"]
+    verbs: ["get"]
+
+# -----------------------------------------------------------------------------
+# RoleBindings
+# -----------------------------------------------------------------------------
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: auth-service-rolebinding
+  namespace: agri-irrigation
+  labels:
+    app: auth-service
+    app.kubernetes.io/part-of: agri-irrigation
+subjects:
+  - kind: ServiceAccount
+    name: auth-service-sa
+    namespace: agri-irrigation
+roleRef:
+  kind: Role
+  name: auth-service-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: irrigation-service-rolebinding
+  namespace: agri-irrigation
+  labels:
+    app: irrigation-service
+    app.kubernetes.io/part-of: agri-irrigation
+subjects:
+  - kind: ServiceAccount
+    name: irrigation-service-sa
+    namespace: agri-irrigation
+roleRef:
+  kind: Role
+  name: irrigation-service-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: notification-service-rolebinding
+  namespace: agri-irrigation
+  labels:
+    app: notification-service
+    app.kubernetes.io/part-of: agri-irrigation
+subjects:
+  - kind: ServiceAccount
+    name: notification-service-sa
+    namespace: agri-irrigation
+roleRef:
+  kind: Role
+  name: notification-service-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: frontend-rolebinding
+  namespace: agri-irrigation
+  labels:
+    app: frontend
+    app.kubernetes.io/part-of: agri-irrigation
+subjects:
+  - kind: ServiceAccount
+    name: frontend-sa
+    namespace: agri-irrigation
+roleRef:
+  kind: Role
+  name: frontend-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: postgres-rolebinding
+  namespace: agri-irrigation
+  labels:
+    app: postgres
+    app.kubernetes.io/part-of: agri-irrigation
+subjects:
+  - kind: ServiceAccount
+    name: postgres-sa
+    namespace: agri-irrigation
+roleRef:
+  kind: Role
+  name: postgres-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mongodb-rolebinding
+  namespace: agri-irrigation
+  labels:
+    app: mongodb
+    app.kubernetes.io/part-of: agri-irrigation
+subjects:
+  - kind: ServiceAccount
+    name: mongodb-sa
+    namespace: agri-irrigation
+roleRef:
+  kind: Role
+  name: mongodb-role
+  apiGroup: rbac.authorization.k8s.io

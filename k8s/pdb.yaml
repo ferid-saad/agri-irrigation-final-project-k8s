@@ -1,0 +1,67 @@
+# PodDisruptionBudget for auth-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: auth-service-pdb
+  namespace: agri-irrigation
+  labels:
+    app: auth-service
+    app.kubernetes.io/name: auth-service
+    app.kubernetes.io/part-of: agri-irrigation
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: auth-service
+
+# PodDisruptionBudget for irrigation-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: irrigation-service-pdb
+  namespace: agri-irrigation
+  labels:
+    app: irrigation-service
+    app.kubernetes.io/name: irrigation-service
+    app.kubernetes.io/part-of: agri-irrigation
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: irrigation-service
+
+# PodDisruptionBudget for notification-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: notification-service-pdb
+  namespace: agri-irrigation
+  labels:
+    app: notification-service
+    app.kubernetes.io/name: notification-service
+    app.kubernetes.io/part-of: agri-irrigation
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: notification-service
+
+# PodDisruptionBudget for frontend
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend-pdb
+  namespace: agri-irrigation
+  labels:
+    app: frontend
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: agri-irrigation
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: frontend
