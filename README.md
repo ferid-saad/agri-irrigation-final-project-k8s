@@ -151,7 +151,7 @@ kubectl get nodes
 
 ### 2. Builder et pousser les images Docker
 
-> Remplacez `ferid-saad` par votre nom d'utilisateur Docker Hub ou registry.
+
 
 ```bash
 docker build -t feridsaad/agri-auth-service:latest ./agri-auth-service
@@ -281,7 +281,8 @@ curl -X POST http://localhost:3000/auth/login \
 | **PodDisruptionBudget (PDB)**         | Garantie de disponibilité minimale durant les maintenances           |
 | **Network Policies**                  | Filtrage réseau entre pods (principe du moindre privilège)           |
 | **Persistent Volumes (PVC)**          | Données PostgreSQL et MongoDB persistées sur disque                  |
-| **Non-root containers**               | Tous les containers s'exécutent en tant que `USER node`              |
+| **Non-root containers**               | 
+| **RBAC**                               | moindre privilège — chaque SA n'accède qu'aux ressources strictement nécessaires, avec automountServiceAccountToken: false.            |
 | **Image tagging**                     | Tags versionnés sur les images (`:latest` pour dev, semver pour prod)|
 | **Multi-replica deployments**         | Plusieurs réplicas pour la haute disponibilité                       |
 | **Ingress Controller**                | Point d'entrée unique avec routage par chemin                        |
