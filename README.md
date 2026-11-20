@@ -281,7 +281,7 @@ curl -X POST http://localhost:3000/auth/login \
 | **PodDisruptionBudget (PDB)**         | Garantie de disponibilité minimale durant les maintenances           |
 | **Network Policies**                  | Filtrage réseau entre pods (principe du moindre privilège)           |
 | **Persistent Volumes (PVC)**          | Données PostgreSQL et MongoDB persistées sur disque                  |
-| **Non-root containers**               | 
+| **Non-root containers**               | Les conteneurs exécutent leur processus principal avec un utilisateur non privilégié (autre que l'utilisateur root)|
 | **RBAC**                               | moindre privilège — chaque SA n'accède qu'aux ressources strictement nécessaires, avec automountServiceAccountToken: false.            |
 | **Image tagging**                     | Tags versionnés sur les images (`:latest` pour dev, semver pour prod)|
 | **Multi-replica deployments**         | Plusieurs réplicas pour la haute disponibilité                       |
