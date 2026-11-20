@@ -29,7 +29,7 @@ spec:
         runAsNonRoot: false
       containers:
         - name: frontend
-          image: ferid-saad/agri-frontend:latest
+          image: feridsaad/agri-frontend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 80

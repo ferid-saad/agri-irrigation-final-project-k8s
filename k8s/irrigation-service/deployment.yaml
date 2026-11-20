@@ -30,7 +30,7 @@ spec:
         runAsUser: 1000
       containers:
         - name: irrigation-service
-          image: ferid-saad/agri-irrigation-service:latest
+          image: feridsaad/agri-irrigation-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3001
