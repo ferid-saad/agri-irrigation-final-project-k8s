@@ -14,7 +14,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
+    restart: unless-stopped
   mongodb:
     image: mongo:7-jammy
     environment:
@@ -29,7 +29,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
+    restart: unless-stopped
   agri-auth-service:
     build: ./agri-auth-service
     environment:
