@@ -1,459 +1,445 @@
-# 🌱 AgriIrrigation — Plateforme de Gestion Intelligente de l'Irrigation
+# AgriIrrigation : gestion de l'irrigation agricole sur Kubernetes (K3S)
 
-![CI](https://github.com/ferid-saad/agri-irrigation/actions/workflows/ci.yml/badge.svg)
 ![Docker](https://img.shields.io/badge/Docker-ready-blue?logo=docker)
-![Kubernetes](https://img.shields.io/badge/K3S-orchestrated-brightgreen?logo=kubernetes)
+![Kubernetes](https://img.shields.io/badge/K3S-deployed-brightgreen?logo=kubernetes)
 ![Node.js](https://img.shields.io/badge/Node.js-20-green?logo=node.js)
 
+Application **full stack en microservices** : un frontend, trois microservices et deux types de bases de données (SQL et NoSQL), conteneurisée avec Docker et déployée sur un cluster **K3S** en appliquant les bonnes pratiques Kubernetes.
+
+Projet réalisé dans le cadre du Master DevOps & Cloud (ISET Tozeur). Auteur : **Ferid Saad**.
+
+Dépôt : https://github.com/ferid-saad/agri-irrigation-final-project-k8s
 
 ---
 
-## 📋 Description
+## 1. Fonctionnalités
 
-**AgriIrrigation** est une application **full-stack microservices** dédiée à la gestion intelligente de l'irrigation agricole. Elle permet aux agriculteurs de gérer leurs parcelles, planifier les arrosages, recevoir des alertes et s'authentifier de manière sécurisée — le tout orchestré via **Kubernetes (K3S)**.
+Un agriculteur peut :
 
-Le projet suit une architecture microservices découplée : chaque service dispose de sa propre base de données, de son propre Dockerfile et de ses propres tests unitaires.
+- créer un compte et se connecter (authentification JWT) ;
+- gérer ses **parcelles** (nom, surface en hectares, culture) ;
+- **planifier des arrosages** (date, durée, volume prévu) et saisir la **consommation réelle**, avec calcul de l'écart ;
+- recevoir des **notifications** :
+  - *succès* à chaque arrosage planifié, avec la parcelle, la date, la durée et le volume ;
+  - *alerte* quand la consommation réelle dépasse de plus de 10 % le volume prévu ;
+  - marquer une notification comme lue ou la supprimer.
 
 ---
 
-## 🏗️ Architecture
+## 2. Correspondance avec la consigne
 
-### Vue d'ensemble
+| Exigence | Réalisation |
+|---|---|
+| Un service frontend | `agri-frontend` : Nginx servant HTML / CSS / JS, et proxy vers les APIs |
+| Trois microservices | `agri-auth-service`, `agri-irrigation-service`, `agri-notification-service` (Node.js / Express) |
+| Base SQL | PostgreSQL 16 (`auth_db`, `irrigation_db`) |
+| Base NoSQL | MongoDB 7 (`notifications_db`) |
+| Conteneurisation | Un Dockerfile par service, `docker-compose.yml` pour le développement local |
+| Déploiement sur K3S | Manifestes dans `k8s/` |
+| Bonnes pratiques Kubernetes | Voir la section 6 |
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        UTILISATEUR                          │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ HTTP (port 80)
-                           ▼
-                ┌─────────────────────┐
-                │  Frontend (Nginx)   │
-                │  HTML / CSS / JS    │
-                └──────────┬──────────┘
-                           │
-                  ┌────────▼────────┐
-                  │  Ingress/Nginx  │  (K3S Ingress Controller)
-                  └────────┬────────┘
-                           │
-          ┌────────────────┼────────────────┐
-          ▼                ▼                ▼
-┌──────────────┐  ┌──────────────┐  ┌──────────────────┐
-│ auth-service │  │ irrigation-  │  │ notification-    │
-│  (port 3000) │  │ service      │  │ service          │
-│  Node.js /   │  │ (port 3001)  │  │ (port 3002)      │
-│  Express     │  │ Node.js /    │  │ Node.js /        │
-│              │  │ Express      │  │ Express          │
-└──────┬───────┘  └──────┬───────┘  └────────┬─────────┘
-       │                 │                   │
-       ▼                 ▼                   ▼
-┌────────────┐  ┌────────────────┐  ┌───────────────┐
-│ PostgreSQL │  │  PostgreSQL    │  │   MongoDB 7   │
-│  auth_db   │  │  irrigation_db │  │ notifications │
-└────────────┘  └────────────────┘  └───────────────┘
-```
+---
 
-### Schéma Mermaid
+## 3. Architecture
 
 ```mermaid
 graph TD
-    User["👤 Utilisateur"] -->|HTTP :80| Frontend["🌐 Frontend\nNginx"]
-    Frontend --> Ingress["🔀 Ingress / Nginx\nK3S Ingress Controller"]
-    Ingress --> Auth["🔐 agri-auth-service\nNode.js :3000"]
-    Ingress --> Irrigation["💧 agri-irrigation-service\nNode.js :3001"]
-    Ingress --> Notification["🔔 agri-notification-service\nNode.js :3002"]
-    Auth --> PG1[("🐘 PostgreSQL 16\nauth_db")]
-    Irrigation --> PG2[("🐘 PostgreSQL 16\nirrigation_db")]
-    Notification --> Mongo[("🍃 MongoDB 7\nnotifications_db")]
+    User["Navigateur"] -->|"http://agri.local :80"| Traefik["Ingress Traefik (K3S)"]
+    Traefik --> Front["frontend-service<br/>Nginx : HTML / CSS / JS"]
+    Front -->|"/api/auth/"| Auth["auth-service :3000"]
+    Front -->|"/api/irrigation/"| Irr["irrigation-service :3001"]
+    Front -->|"/api/notifications/"| Notif["notification-service :3002"]
+    Auth --> PG[("PostgreSQL 16<br/>auth_db + irrigation_db")]
+    Irr --> PG
+    Notif --> Mongo[("MongoDB 7<br/>notifications_db")]
+```
+
+Principes :
+
+- **Un seul point d'entrée** : l'Ingress envoie tout le trafic au frontend. Le Nginx du frontend redirige `/api/auth/`, `/api/irrigation/` et `/api/notifications/` vers les microservices.
+- **Une base par domaine** : l'authentification et l'irrigation utilisent des bases PostgreSQL distinctes ; les notifications, de nature documentaire, utilisent MongoDB.
+- **JWT partagé** : chaque service valide lui-même le token avec le même secret, sans appeler le service d'authentification.
+- **Isolation réseau** : les NetworkPolicies n'autorisent que les flux nécessaires (section 6).
+
+---
+
+## 4. Stack technique
+
+| Composant | Technologie |
+|---|---|
+| Frontend | Nginx 1.25 (Alpine), HTML / CSS / JavaScript |
+| Microservices | Node.js 20, Express |
+| Authentification | JSON Web Token, bcryptjs |
+| Base SQL | PostgreSQL 16 (driver `pg`) |
+| Base NoSQL | MongoDB 7 (Mongoose) |
+| Conteneurs | Docker, Docker Compose |
+| Orchestration | K3S (Kubernetes), Ingress Traefik |
+| Registre d'images | Docker Hub (`feridsaad/agri-*`) |
+
+---
+
+## 5. Structure du dépôt
+
+```
+.
+├── docker-compose.yml          # Exécution locale
+├── init-db.sql                 # Création des bases auth_db et irrigation_db
+├── .env.example                # Modèle de configuration (valeurs factices)
+├── agri-auth-service/          # Microservice d'authentification
+├── agri-irrigation-service/    # Microservice parcelles et arrosages
+├── agri-notification-service/  # Microservice notifications (MongoDB)
+├── agri-frontend/              # Nginx + interface web
+│   ├── nginx.conf
+│   └── public/                 # index.html, style.css, app.js
+├── k8s/
+│   ├── namespace.yaml
+│   ├── rbac.yaml               # ServiceAccounts, Roles, RoleBindings
+│   ├── configmap.yaml          # ConfigMap agri-config
+│   ├── ingress.yaml            # Ingress Traefik
+│   ├── network-policy.yaml     # 13 NetworkPolicies
+│   ├── pdb.yaml                # PodDisruptionBudgets
+│   ├── postgres/               # Deployment, Service, PVC, init
+│   ├── mongodb/                # Deployment, Service, PVC
+│   ├── auth-service/           # Deployment, Service, HPA
+│   ├── irrigation-service/     # Deployment, Service, HPA
+│   ├── notification-service/   # Deployment, Service, HPA
+│   └── frontend/               # Deployment, Service, HPA
+└── captures/                   # Captures d'écran du projet
 ```
 
 ---
 
-## 🛠️ Stack Technique
+## 6. Bonnes pratiques Kubernetes appliquées
 
-| Composant               | Technologie              | Version  | Rôle                                      |
-|-------------------------|--------------------------|----------|-------------------------------------------|
-| **Frontend**            | Nginx + HTML/CSS/JS      | 1.25     | Interface utilisateur statique            |
-| **MS1 — Auth**          | Node.js / Express        | 20 LTS   | Authentification JWT, gestion utilisateurs|
-| **MS2 — Irrigation**    | Node.js / Express        | 20 LTS   | Gestion parcelles & sessions d'arrosage  |
-| **MS3 — Notification**  | Node.js / Express        | 20 LTS   | Alertes & notifications MongoDB           |
-| **SQL Database**        | PostgreSQL               | 16       | Données auth et irrigation (relationnel)  |
-| **NoSQL Database**      | MongoDB                  | 7        | Notifications (documentaire)              |
-| **ORM/Driver SQL**      | pg (node-postgres)       | 8.x      | Connexion PostgreSQL                      |
-| **ODM NoSQL**           | Mongoose                 | 8.x      | Connexion MongoDB                         |
-| **Authentification**    | JSON Web Token (JWT)     | 9.x      | Sécurisation des APIs                     |
-| **Chiffrement**         | bcryptjs                 | 2.x      | Hachage des mots de passe                 |
-| **Containerisation**    | Docker                   | 24+      | Build & packaging des services            |
-| **Orchestration**       | K3S (Kubernetes)         | v1.28+   | Déploiement et gestion des pods           |
-| **CI/CD**               | GitHub Actions           | —        | Tests automatisés et build Docker         |
-| **Tests**               | Jest + Supertest         | 29.x     | Tests unitaires et d'intégration          |
-
----
-
-## ✅ Prérequis
-
-Avant de commencer, assurez-vous d'avoir installé :
-
-| Outil            | Version minimale | Lien                                          |
-|------------------|-----------------|-----------------------------------------------|
-| **Git**          | 2.x             | https://git-scm.com/                         |
-| **Docker**       | 24.x            | https://docs.docker.com/get-docker/           |
-| **Docker Compose**| 2.x            | https://docs.docker.com/compose/install/      |
-| **kubectl**      | 1.28+           | https://kubernetes.io/docs/tasks/tools/       |
-| **K3S**          | v1.28+          | https://k3s.io/                               |
-| **Node.js**      | 20 LTS          | https://nodejs.org/ (optionnel, pour dev local)|
+| Pratique | Mise en œuvre |
+|---|---|
+| **Namespace dédié** | `agri-irrigation` : isolation des ressources |
+| **ConfigMap** | `agri-config` : hôtes, ports et noms de bases, séparés du code |
+| **Secret** | `agri-secrets` : mots de passe des bases et secret JWT, **créé par commande, jamais versionné** |
+| **ServiceAccounts + RBAC** | Un ServiceAccount, un Role et un RoleBinding par composant (`k8s/rbac.yaml`) |
+| **Requests et limits** | Ressources CPU / mémoire déclarées dans les Deployments |
+| **Probes** | Liveness / readiness sur `/health` pour les services ; MongoDB avec startupProbe, liveness TCP et readiness `mongosh` |
+| **Haute disponibilité** | 2 réplicas minimum pour le frontend et les trois microservices |
+| **HPA** | Mise à l'échelle automatique sur le CPU (seuil 70 %), de 2 à 5 pods (2 à 4 pour le frontend) |
+| **PodDisruptionBudget** | `minAvailable: 1` pour le frontend et les trois microservices |
+| **NetworkPolicies** | `default-deny-all`, DNS autorisé, puis uniquement les flux nécessaires : Ingress → frontend, frontend → services, services → leur base |
+| **Persistance** | PVC `local-path` de 2 Gi pour PostgreSQL et MongoDB |
+| **Rolling updates** | Stratégie `RollingUpdate` (par défaut des Deployments) : mise à jour sans interruption |
+| **Ingress** | Point d'entrée unique, routage par nom d'hôte (`agri.local`) |
+| **Secrets hors Git** | `.env` ignoré par Git, `.env.example` fourni, Secret Kubernetes créé sur le cluster |
+| **Authentification des bases** | PostgreSQL et MongoDB protégés par mot de passe, y compris en local |
 
 ---
 
-## 🚀 Démarrage Rapide (Docker Compose)
+## 7. Lancer en local (Docker Compose)
 
-### 1. Cloner le dépôt
+### Prérequis
+
+Git, Docker Desktop (ou Docker Engine) avec Docker Compose v2.
+
+### Étapes
+
+```bash
+git clone https://github.com/ferid-saad/agri-irrigation-final-project-k8s.git
+cd agri-irrigation-final-project-k8s
+cp .env.example .env        # PowerShell : Copy-Item .env.example .env
+```
+
+Éditez `.env` et remplacez les valeurs `CHANGEME_...`. Pour les mots de passe, utilisez uniquement des lettres et des chiffres (celui de MongoDB est placé dans une URL). `JWT_SECRET` doit faire au moins 32 caractères.
+
+```bash
+docker compose up --build -d
+docker compose ps
+```
+
+Les six conteneurs doivent être `Up`, PostgreSQL et MongoDB en `healthy`. L'application est disponible sur **http://localhost**.
+
+Seul le port 80 (frontend) est publié. Les APIs sont testables **à travers le frontend** :
+
+```bash
+curl http://localhost/api/auth/health
+curl http://localhost/api/irrigation/health
+curl http://localhost/api/notifications/health
+```
+
+Arrêt :
+
+```bash
+docker compose down        # conserve les données
+docker compose down -v     # supprime aussi les volumes
+```
+
+> Si vous changez un mot de passe de base après un premier démarrage, supprimez les volumes (`down -v`) : les bases gardent le mot de passe défini à la création du volume.
+
+---
+
+## 8. Déployer sur K3S
+
+### Prérequis
+
+- un cluster K3S fonctionnel (`kubectl get nodes` : nœuds `Ready`) ;
+- l'Ingress Traefik, installé par défaut avec K3S ;
+- les images publiées sur Docker Hub (étape 1).
+
+### Étape 1 : construire et publier les images (poste de développement)
+
+```bash
+docker login
+for s in auth-service irrigation-service notification-service frontend; do
+  docker build -t feridsaad/agri-$s:latest ./agri-$s
+  docker push feridsaad/agri-$s:latest
+done
+```
+
+Sous PowerShell, répétez `docker build` et `docker push` pour chacun des quatre services.
+
+### Étape 2 : récupérer le dépôt sur le master
+
+Seuls les manifestes du dossier `k8s/` sont nécessaires sur le cluster ; les nœuds téléchargent les images depuis Docker Hub.
 
 ```bash
 git clone https://github.com/ferid-saad/agri-irrigation-final-project-k8s.git
 cd agri-irrigation-final-project-k8s
 ```
 
-### 2. Lancer tous les services
+### Étape 3 : namespace, RBAC, Secret et ConfigMap
 
 ```bash
-docker-compose up --build
-```
-
-### 3. Accéder à l'application
-
-Ouvrez votre navigateur sur : **http://localhost**
-
-> Les services sont disponibles sur :
-> - Frontend : http://localhost
-> - Auth Service : http://localhost:3000
-> - Irrigation Service : http://localhost:3001
-> - Notification Service : http://localhost:3002
-
-### 4. Arrêter les services
-
-```bash
-docker-compose down
-# Pour supprimer aussi les volumes (données) :
-docker-compose down -v
-```
-
----
-
-## ☸️ Déploiement Kubernetes (K3S)
-
-### 1. Installer K3S
-
-```bash
-curl -sfL https://get.k3s.io | sh -
-# Vérifier l'installation
-kubectl get nodes
-```
-
-### 2. Builder et pousser les images Docker
-
-
-
-```bash
-docker build -t feridsaad/agri-auth-service:latest ./agri-auth-service
-docker build -t feridsaad/agri-irrigation-service:latest ./agri-irrigation-service
-docker build -t feridsaad/agri-notification-service:latest ./agri-notification-service
-docker build -t feridsaad/agri-frontend:latest ./agri-frontend
-
-docker push feridsaad/agri-auth-service:latest
-docker push feridsaad/agri-irrigation-service:latest
-docker push feridsaad/agri-notification-service:latest
-docker push feridsaad/agri-frontend:latest
-```
-
-### 3. Déployer sur K3S
-
-```bash
-# Namespace dédié
 kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/rbac.yaml
 
-# Secrets et configuration
-kubectl apply -f k8s/secrets.yaml
+kubectl create secret generic agri-secrets -n agri-irrigation \
+  --from-literal=postgres-user=agri \
+  --from-literal=postgres-password="$(openssl rand -hex 12)" \
+  --from-literal=jwt-secret="$(openssl rand -hex 32)" \
+  --from-literal=mongo-user=agri_mongo \
+  --from-literal=mongo-password="$(openssl rand -hex 12)"
+
 kubectl apply -f k8s/configmap.yaml
+```
 
-# Bases de données
+Le Secret est généré aléatoirement directement sur le cluster : aucune valeur n'est écrite dans un fichier. Le fichier modèle de Secret du dépôt ne contient que des valeurs factices : **ne l'appliquez pas**.
+
+> Ne recréez pas le Secret après le déploiement des bases : PostgreSQL et MongoDB gardent le mot de passe d'origine dans leur volume.
+
+### Étape 4 : bases de données
+
+```bash
 kubectl apply -f k8s/postgres/
 kubectl apply -f k8s/mongodb/
+kubectl wait --for=condition=Ready pod -l app=postgres -n agri-irrigation --timeout=180s
+kubectl wait --for=condition=Ready pod -l app=mongodb -n agri-irrigation --timeout=180s
+```
 
-# Microservices
+### Étape 5 : microservices, frontend et Ingress
+
+```bash
 kubectl apply -f k8s/auth-service/
 kubectl apply -f k8s/irrigation-service/
 kubectl apply -f k8s/notification-service/
-
-# Frontend et exposition
 kubectl apply -f k8s/frontend/
 kubectl apply -f k8s/ingress.yaml
-
-# Politiques réseau et disponibilité
-kubectl apply -f k8s/network-policy.yaml
-kubectl apply -f k8s/pdb.yaml
 ```
 
-### 4. Vérifier le déploiement
+### Étape 6 : disponibilité et isolation réseau
+
+À appliquer **en dernier**, une fois l'application validée :
 
 ```bash
-# Voir tous les ressources dans le namespace
-kubectl get all -n agri-irrigation
+kubectl apply -f k8s/pdb.yaml
+kubectl apply -f k8s/network-policy.yaml
+```
 
-# Voir les pods en détail
-kubectl get pods -n agri-irrigation -o wide
+Pour revenir en arrière en cas de blocage : `kubectl delete -f k8s/network-policy.yaml`.
 
-# Voir les logs d'un service
-kubectl logs -f deployment/agri-auth-service -n agri-irrigation
+### Étape 7 : vérifier
 
-# Voir les événements
-kubectl get events -n agri-irrigation --sort-by='.lastTimestamp'
+```bash
+kubectl get pods,svc,ingress,hpa,pdb,pvc -n agri-irrigation
+kubectl get networkpolicy -n agri-irrigation
+```
+
+Tous les pods doivent être `1/1 Running`, les deux PVC `Bound`.
+
+Test depuis le master, sans modifier le fichier `hosts` :
+
+```bash
+curl -s -o /dev/null -w "frontend: %{http_code}\n" -H "Host: agri.local" http://127.0.0.1/
+curl -s -H "Host: agri.local" http://127.0.0.1/api/auth/health
+curl -s -H "Host: agri.local" http://127.0.0.1/api/irrigation/health
+curl -s -H "Host: agri.local" http://127.0.0.1/api/notifications/health
+```
+
+### Étape 8 : accéder à l'application depuis votre poste
+
+Récupérez l'adresse IP du master (`kubectl get nodes -o wide`) et ajoutez-la au fichier `hosts` :
+
+- Windows : `C:\Windows\System32\drivers\etc\hosts` (éditeur lancé en administrateur)
+- Linux / macOS : `/etc/hosts`
+
+```
+192.168.56.10  agri.local
+```
+
+(remplacez l'IP par celle de votre master). Ouvrez ensuite **http://agri.local**.
+
+### Mettre à jour un service
+
+```bash
+docker build -t feridsaad/agri-frontend:latest ./agri-frontend
+docker push feridsaad/agri-frontend:latest
+kubectl rollout restart deployment/frontend -n agri-irrigation
+kubectl rollout status deployment/frontend -n agri-irrigation
 ```
 
 ---
 
-## 📡 API Endpoints
+## 9. API
 
-### 🔐 MS1 — agri-auth-service (port 3000)
+Depuis le navigateur ou `curl`, les chemins passent par le frontend : `/api/<service>/...`. Nginx retire le préfixe `/api/<service>` avant de transmettre la requête au service.
 
-| Méthode | Endpoint            | Auth requise | Description                        |
-|---------|--------------------|--------------|------------------------------------|
-| `GET`   | `/health`          | ❌           | Health check du service            |
-| `POST`  | `/auth/register`   | ❌           | Créer un nouveau compte utilisateur|
-| `POST`  | `/auth/login`      | ❌           | Se connecter, retourne un JWT      |
-| `GET`   | `/auth/me`         | ✅ Bearer    | Récupérer son profil               |
+### Authentification : `/api/auth/` (service sur le port 3000)
 
-**Exemple — Register :**
+| Méthode | Chemin (via le frontend) | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/auth/health` | non | État du service |
+| `POST` | `/api/auth/register` | non | Crée un compte. Corps : `{"email", "password"}` (mot de passe de 6 caractères minimum). Réponse `201` : `{"id", "email"}` |
+| `POST` | `/api/auth/login` | non | Connexion. Corps : `{"email", "password"}`. Réponse : `{"token"}` |
+
+### Irrigation : `/api/irrigation/` (service sur le port 3001)
+
+| Méthode | Chemin | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/irrigation/health` | non | État du service |
+| `GET` | `/api/irrigation/parcelles` | Bearer | Liste des parcelles |
+| `POST` | `/api/irrigation/parcelles` | Bearer | Crée une parcelle : `{"nom", "surface_ha", "culture"}` |
+| `DELETE` | `/api/irrigation/parcelles/:id` | Bearer | Supprime une parcelle et ses arrosages |
+| `GET` | `/api/irrigation/arrosages` | Bearer | Liste des arrosages (avec le nom de la parcelle) |
+| `POST` | `/api/irrigation/arrosages` | Bearer | Planifie un arrosage : `{"parcelle_id", "date_arrosage", "duree_min", "volume_l"}` |
+| `PATCH` | `/api/irrigation/arrosages/:id` | Bearer | Enregistre la consommation réelle : `{"volume_reel_l"}` |
+
+### Notifications : `/api/notifications/` (service sur le port 3002)
+
+| Méthode | Chemin | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/notifications/health` | non | État du service |
+| `GET` | `/api/notifications/notifications` | Bearer | Notifications de l'utilisateur, les plus récentes d'abord |
+| `POST` | `/api/notifications/notifications` | Bearer | Crée une notification : `{"type": "alerte" \| "info" \| "succes", "message", "parcelleId"}` |
+| `PATCH` | `/api/notifications/notifications/:id/lu` | Bearer | Marque comme lue |
+| `DELETE` | `/api/notifications/notifications/:id` | Bearer | Supprime |
+
+L'identifiant de l'utilisateur est lu dans le JWT : chacun ne voit que ses propres notifications.
+
+### Exemple
+
 ```bash
-curl -X POST http://localhost:3000/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com","password":"secret123","nom":"Ahmed","prenom":"Ben Ali"}'
-```
-
-**Exemple — Login :**
-```bash
-curl -X POST http://localhost:3000/auth/login \
+curl -X POST http://agri.local/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"secret123"}'
+
+TOKEN=$(curl -s -X POST http://agri.local/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"secret123"}' | jq -r .token)
+
+curl -X POST http://agri.local/api/irrigation/parcelles \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"nom":"Parcelle Nord","surface_ha":5,"culture":"oliviers"}'
+
+curl http://agri.local/api/notifications/notifications -H "Authorization: Bearer $TOKEN"
 ```
 
 ---
 
-### 💧 MS2 — agri-irrigation-service (port 3001)
+## 10. Démonstration
 
-| Méthode   | Endpoint                        | Auth requise | Description                       |
-|-----------|---------------------------------|--------------|-----------------------------------|
-| `GET`     | `/health`                       | ❌           | Health check du service           |
-| `GET`     | `/parcelles`                    | ✅ Bearer    | Lister toutes les parcelles       |
-| `POST`    | `/parcelles`                    | ✅ Bearer    | Créer une nouvelle parcelle       |
-| `GET`     | `/parcelles/:id`                | ✅ Bearer    | Détail d'une parcelle             |
-| `PUT`     | `/parcelles/:id`                | ✅ Bearer    | Modifier une parcelle             |
-| `DELETE`  | `/parcelles/:id`                | ✅ Bearer    | Supprimer une parcelle            |
-| `GET`     | `/arrosages`                    | ✅ Bearer    | Lister les sessions d'arrosage    |
-| `POST`    | `/arrosages`                    | ✅ Bearer    | Créer une session d'arrosage      |
-| `GET`     | `/arrosages/:id`                | ✅ Bearer    | Détail d'une session d'arrosage   |
-| `PUT`     | `/arrosages/:id`                | ✅ Bearer    | Modifier une session d'arrosage   |
-| `DELETE`  | `/arrosages/:id`                | ✅ Bearer    | Supprimer une session d'arrosage  |
+### Isolation réseau (moindre privilège)
 
----
-
-### 🔔 MS3 — agri-notification-service (port 3002)
-
-| Méthode   | Endpoint                        | Auth requise | Description                        |
-|-----------|---------------------------------|--------------|------------------------------------|
-| `GET`     | `/health`                       | ❌           | Health check du service            |
-| `POST`    | `/notifications`                | ✅ Bearer    | Créer une notification             |
-| `GET`     | `/notifications`                | ✅ Bearer    | Lister ses notifications           |
-| `PATCH`   | `/notifications/:id/lu`         | ✅ Bearer    | Marquer une notification comme lue |
-| `DELETE`  | `/notifications/:id`            | ✅ Bearer    | Supprimer une notification         |
-
----
-
-## 🏆 Bonnes Pratiques Kubernetes Appliquées
-
-| Pratique                              | Description                                                           |
-|---------------------------------------|-----------------------------------------------------------------------|
-| **Namespace dédié**                   | Isolation dans le namespace `agri-irrigation`                        |
-| **Secrets Kubernetes**                | Mots de passe et JWT_SECRET stockés dans des `Secret` K8s (non en clair) |
-| **ConfigMaps**                        | Variables de configuration découplées du code                        |
-| **Resource Requests & Limits**        | CPU et mémoire limitées pour éviter la saturation du nœud            |
-| **Liveness & Readiness Probes**       | Health checks automatiques via `/health` endpoints                   |
-| **Rolling Updates**                   | Mise à jour sans interruption de service (`RollingUpdate` strategy)  |
-| **PodDisruptionBudget (PDB)**         | Garantie de disponibilité minimale durant les maintenances           |
-| **Network Policies**                  | Filtrage réseau entre pods (principe du moindre privilège)           |
-| **Persistent Volumes (PVC)**          | Données PostgreSQL et MongoDB persistées sur disque                  |
-| **Non-root containers**               | Les conteneurs exécutent leur processus principal avec un utilisateur non privilégié (autre que l'utilisateur root)|
-| **RBAC**                               | moindre privilège — chaque SA n'accède qu'aux ressources strictement nécessaires, avec automountServiceAccountToken: false.            |
-| **Image tagging**                     | Tags versionnés sur les images (`:latest` pour dev, semver pour prod)|
-| **Multi-replica deployments**         | Plusieurs réplicas pour la haute disponibilité                       |
-| **Ingress Controller**                | Point d'entrée unique avec routage par chemin                        |
-| **Horizontal scaling ready**          | Architecture prête pour l'HPA (Horizontal Pod Autoscaler)            |
-
----
-
-## 📁 Structure du Projet
-
-```
-agri-irrigation/
-├── 📄 docker-compose.yml              # Orchestration locale Docker Compose
-├── 📄 init-db.sql                     # Scripts d'initialisation SQL
-├── 📄 .gitignore
-│
-├── 📂 agri-auth-service/              # MS1 — Service d'authentification
-│   ├── 📄 Dockerfile
-│   ├── 📄 package.json
-│   ├── 📄 package-lock.json
-│   ├── 📄 .dockerignore
-│   ├── 📄 .gitignore
-│   ├── 📂 src/
-│   │   ├── 📄 app.js                  # Express app + routes
-│   │   ├── 📄 server.js               # Point d'entrée
-│   │   ├── 📄 db.js                   # Connexion PostgreSQL
-│   │   ├── 📂 middleware/
-│   │   │   └── 📄 auth.js             # Middleware JWT
-│   │   └── 📂 routes/
-│   │       └── 📄 auth.js             # Routes /auth/*
-│   └── 📂 tests/
-│       └── 📄 auth.test.js
-│
-├── 📂 agri-irrigation-service/        # MS2 — Service irrigation
-│   ├── 📄 Dockerfile
-│   ├── 📄 package.json
-│   ├── 📄 package-lock.json
-│   ├── 📄 .dockerignore
-│   ├── 📂 src/
-│   │   ├── 📄 app.js
-│   │   ├── 📄 server.js
-│   │   ├── 📄 db.js
-│   │   ├── 📂 middleware/
-│   │   │   └── 📄 auth.js
-│   │   └── 📂 routes/
-│   │       ├── 📄 parcelles.js        # Routes /parcelles/*
-│   │       └── 📄 arrosages.js        # Routes /arrosages/*
-│   └── 📂 tests/
-│       ├── 📄 health.test.js
-│       ├── 📄 parcelles.test.js
-│       └── 📄 arrosages.test.js
-│
-├── 📂 agri-notification-service/      # MS3 — Service notifications
-│   ├── 📄 Dockerfile
-│   ├── 📄 package.json
-│   ├── 📄 .dockerignore
-│   ├── 📂 src/
-│   │   ├── 📄 app.js
-│   │   ├── 📄 server.js
-│   │   ├── 📄 db.js                   # Connexion MongoDB
-│   │   ├── 📂 middleware/
-│   │   │   └── 📄 auth.js
-│   │   ├── 📂 models/
-│   │   │   └── 📄 Notification.js     # Schéma Mongoose
-│   │   └── 📂 routes/
-│   │       └── 📄 notifications.js
-│   └── 📂 tests/
-│
-├── 📂 agri-frontend/                  # Frontend statique Nginx
-│   ├── 📄 Dockerfile
-│   ├── 📄 nginx.conf
-│   ├── 📄 .dockerignore
-│   └── 📂 public/
-│       ├── 📄 index.html
-│       ├── 📄 style.css
-│       └── 📄 app.js
-│
-├── 📂 k8s/                            # Manifestes Kubernetes
-│   ├── 📄 namespace.yaml
-│   ├── 📄 secrets.yaml
-│   ├── 📄 configmap.yaml
-│   ├── 📄 ingress.yaml
-│   ├── 📄 network-policy.yaml
-│   ├── 📄 pdb.yaml
-│   ├── 📂 postgres/
-│   │   ├── 📄 deployment.yaml
-│   │   ├── 📄 service.yaml
-│   │   └── 📄 pvc.yaml
-│   ├── 📂 mongodb/
-│   │   ├── 📄 deployment.yaml
-│   │   ├── 📄 service.yaml
-│   │   └── 📄 pvc.yaml
-│   ├── 📂 auth-service/
-│   │   ├── 📄 deployment.yaml
-│   │   └── 📄 service.yaml
-│   ├── 📂 irrigation-service/
-│   │   ├── 📄 deployment.yaml
-│   │   └── 📄 service.yaml
-│   ├── 📂 notification-service/
-│   │   ├── 📄 deployment.yaml
-│   │   └── 📄 service.yaml
-│   └── 📂 frontend/
-│       ├── 📄 deployment.yaml
-│       └── 📄 service.yaml
-│
-├── 📂 captures/                       # Captures d'écran du projet
-│
-└── 📂 .github/
-    └── 📂 workflows/
-        └── 📄 ci.yml                  # Pipeline CI GitHub Actions
-```
-
----
-
-## 🧪 Lancer les Tests
-
-### Tests locaux (par service)
+Un pod sans label ne doit pas atteindre PostgreSQL :
 
 ```bash
-# MS1 — Auth Service
-cd agri-auth-service
-npm install
-npm test
-
-# MS2 — Irrigation Service
-cd agri-irrigation-service
-npm install
-npm test
-
-# MS3 — Notification Service
-cd agri-notification-service
-npm install
-npm test
+kubectl run np-test --rm -i --restart=Never -n agri-irrigation --image=busybox \
+  -- nc -zv -w 3 postgres-service 5432
 ```
 
-### Tests avec variables d'environnement
+Résultat attendu : délai dépassé. Un pod portant le label du frontend atteint l'authentification :
 
 ```bash
-# Auth Service avec PostgreSQL local
-DB_HOST=localhost DB_PORT=5433 DB_USER=agri DB_PASSWORD=agri123 \
-DB_NAME=auth_db JWT_SECRET=test-secret npm test
-
-# Notification Service avec MongoDB local
-MONGODB_URI=mongodb://localhost:27017/test_notifications \
-JWT_SECRET=test-secret npm test
+kubectl run np-test2 --rm -i --restart=Never -n agri-irrigation --labels=app=frontend \
+  --image=curlimages/curl -- curl -s --max-time 5 http://auth-service:3000/health
 ```
 
-### CI/CD — GitHub Actions
+Résultat attendu : `{"status":"ok","service":"auth-service"}`.
 
-Chaque `push` ou `pull_request` sur `main` ou `develop` déclenche automatiquement le pipeline CI qui :
+### Résilience
 
-1. ✅ Lance les tests de `agri-auth-service` (avec PostgreSQL en service)
-2. ✅ Lance les tests de `agri-irrigation-service` (avec PostgreSQL en service)
-3. ✅ Lance les tests de `agri-notification-service` (avec MongoDB en service)
-4. 🐳 Build les 4 images Docker (si tous les tests passent)
+```bash
+kubectl delete pod -n agri-irrigation -l app=auth-service --wait=false
+kubectl get pods -n agri-irrigation -l app=auth-service -w
+```
+
+Le Deployment recrée le pod pendant que le second réplica continue de servir les requêtes.
+
+### Persistance
+
+Supprimez le pod PostgreSQL (`kubectl delete pod -n agri-irrigation -l app=postgres`), attendez son retour : les comptes et les parcelles sont toujours présents, car les données sont sur un PVC.
 
 ---
 
-## 🤝 Contribution
+## 11. Tests et intégration continue
 
-1. Forker le dépôt
-2. Créer une branche feature : `git checkout -b feature/ma-fonctionnalite`
-3. Committer vos changements : `git commit -m 'feat: ajout ma fonctionnalité'`
-4. Pousser la branche : `git push origin feature/ma-fonctionnalite`
-5. Ouvrir une Pull Request vers `develop`
+Les services d'authentification et d'irrigation disposent de tests Jest et Supertest :
 
+```bash
+cd agri-auth-service && npm install && npm test
+cd ../agri-irrigation-service && npm install && npm test
+```
 
+Ces tests ont besoin d'une base PostgreSQL accessible (variables `DB_*` et `JWT_SECRET`). Un workflow GitHub Actions (`.github/workflows/ci.yml`) exécute les tests et construit les images Docker à chaque `push` ou `pull_request`.
 
+---
 
-<div align="center">
+## 12. Captures d'écran
 
-**🌱 AgriIrrigation** — Développé dans le cadre du projet DevOps 2027  
-Auteur : **Ferid Saad**
+| Capture | Fichier |
+|---|---|
+| Application sur `agri.local` (parcelles, arrosages) | `captures/app-agri-local.png` |
+| Notifications (succès et alerte) | `captures/notifications.png` |
+| Ressources du namespace | `captures/kubectl-get-all.png` |
+| Ingress, HPA, PDB, PVC, NetworkPolicies | `captures/kubectl-ressources.png` |
+| Test d'isolation réseau | `captures/network-policy-test.png` |
+| Images sur Docker Hub | `captures/dockerhub.png` |
 
-</div>
+![Application](captures/app-agri-local.png)
+![Notifications](captures/notifications.png)
+
+---
+
+## 13. Dépannage
+
+| Symptôme | Cause probable | Solution |
+|---|---|---|
+| `ImagePullBackOff` | Nom d'image ou de compte Docker Hub erroné, dépôt privé | Vérifier `image:` dans les Deployments (`feridsaad/...`) et rendre les dépôts publics |
+| `password authentication failed` | Secret recréé après la création des volumes | Supprimer les PVC des bases et redéployer (les données sont perdues) |
+| MongoDB redémarre en boucle | Sondes trop strictes pour `mongosh` | Utiliser la startupProbe et la liveness TCP fournies dans `k8s/mongodb/deployment.yaml` |
+| `502 Bad Gateway` en local après un redémarrage de Docker | Les bases ne sont pas relancées, ou Nginx a gardé une ancienne adresse | `docker compose up -d`, puis `docker compose restart agri-frontend` |
+| `agri.local` inaccessible | Entrée `hosts` absente ou erronée | Vérifier l'IP du master et le fichier `hosts` |
+| Site inaccessible après les NetworkPolicies | Un pod n'a pas le label `app: <nom>` attendu | `kubectl get pods -n agri-irrigation --show-labels`, ou `kubectl delete -f k8s/network-policy.yaml` |
+
+---
+
+## 14. Limites connues et perspectives
+
+- **Création du schéma SQL au démarrage** : lorsque deux réplicas démarrent en même temps sur une base vide, l'un peut échouer sur un conflit de création de tables puis redémarrer une fois. À terme, un Job de migration ou un `initContainer` exécuté une seule fois supprimerait ce cas.
+- **Notifications émises par le navigateur** : le frontend crée les notifications après chaque action. Une architecture plus robuste ferait émettre l'événement par le service d'irrigation.
+- **Valeur de repli du secret JWT** : le service d'authentification prévoit une valeur par défaut si `JWT_SECRET` est absent ; elle devrait être supprimée pour que le service refuse de démarrer sans secret.
+- **Secrets Kubernetes** : ils sont seulement encodés en base64. En production, utiliser Sealed Secrets, External Secrets ou Vault.
+- **Pas de TLS** sur l'Ingress : ajouter cert-manager et un certificat.
+- **Bases de données en un seul réplica**, avec un stockage `local-path` lié à un nœud : prévoir un opérateur de base (réplication) et un stockage réseau.
+- **`frontend-service` exposé en NodePort** en plus de l'Ingress : un `ClusterIP` suffirait.
+- **Supervision** : ajouter Prometheus et Grafana pour les métriques et les alertes.
+
+---
+
+## 15. Auteur
+
+**Ferid Saad** : Master DevOps & Cloud, ISET Tozeur.
