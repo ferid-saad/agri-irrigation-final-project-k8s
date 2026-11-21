@@ -27,13 +27,12 @@
       </form>
     </section>
 
-        <div id="app-section">
+    <div id="app-section">
       <section>
         <h2>Mes parcelles</h2>
         <div class="table-wrap">
           <table>
             <thead>
-              
               <tr><th>N°</th><th>Nom</th><th>Surface (ha)</th><th>Culture</th><th>Action</th></tr>
             </thead>
             <tbody id="parcelles-body"></tbody>
@@ -73,6 +72,12 @@
           <label>Volume prévu (litres) <input type="number" id="a-volume" step="0.01" min="0.01" required></label>
           <button type="submit">Planifier l'arrosage</button>
         </form>
+      </section>
+
+      <section>
+        <h2>Notifications <span id="notif-count" class="badge" hidden></span></h2>
+        <p id="notifications-empty" class="empty" hidden>Aucune notification.</p>
+        <ul id="notifications-list" class="notif-list"></ul>
       </section>
     </div>
   </main>
