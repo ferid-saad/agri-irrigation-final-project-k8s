@@ -45,7 +45,9 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - agri-net
+      agri-net:
+        aliases:
+          - auth-service
     restart: unless-stopped
 
   agri-irrigation-service:
@@ -63,7 +65,9 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - agri-net
+      agri-net:
+        aliases:
+          - irrigation-service
     restart: unless-stopped
 
   agri-notification-service:
@@ -77,7 +81,9 @@ services:
       mongodb:
         condition: service_healthy
     networks:
-      - agri-net
+      agri-net:
+        aliases:
+          - notification-service
     restart: unless-stopped
 
   agri-frontend:
